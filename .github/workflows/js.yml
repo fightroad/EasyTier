@@ -1,25 +1,10 @@
 name: EasyTier JavaScript Hosts
 
 on:
+  workflow_dispatch:
   push:
-    branches: ["develop", "main", "releases/**"]
-    paths:
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "easytier-core/**"
-      - "easytier-proto/**"
-      - "easytier-js/**"
-      - ".github/workflows/js.yml"
-  pull_request:
-    branches: ["develop", "main"]
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "easytier-core/**"
-      - "easytier-proto/**"
-      - "easytier-js/**"
-      - ".github/workflows/js.yml"
+    tags:
+      - "v*"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

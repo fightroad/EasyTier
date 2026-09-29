@@ -1,26 +1,6 @@
 name: ohos
 
 on:
-  push:
-    branches: [develop, main, "releases/**", "ohos/**"]
-    tags:
-      - "v*"
-      - "!*-pre"
-  pull_request:
-    branches: [develop, main, "ohos/**"]
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "rust-toolchain.toml"
-      - ".cargo/**"
-      - "easytier/**"
-      - "easytier-core/**"
-      - "easytier-proto/**"
-      - "easytier-rpc-build/**"
-      - "easytier-contrib/easytier-ohrs/**"
-      - ".github/workflows/ohos.yml"
-      - ".github/actions/**"
   workflow_dispatch:
     inputs:
       publish:
@@ -28,6 +8,10 @@ on:
         required: false
         default: false
         type: boolean
+  push:
+    tags:
+      - "v*"
+      - "!*-pre"
 
 permissions:
   actions: write
