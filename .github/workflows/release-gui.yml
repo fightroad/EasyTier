@@ -1,0 +1,121 @@
+name: EasyTier GUI Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      gui_run_id:
+        description: 'Optional GUI run id. Leave empty to use the latest successful EasyTier GUI run'
+        type: string
+        required: false
+        default: ''
+      branch:
+        description: 'Branch to look up GUI run on when gui_run_id is empty (default: current branch)'
+        type: string
+        required: false
+        default: ''
+      version:
+        description: 'Version / tag for this release (e.g. v2.7.0-custom)'
+        type: string
+        default: 'v2.7.0'
+        required: true
+      make_latest:
+        description: 'Mark this release as latest'
+        type: boolean
+        default: false
+        required: true
+      draft:
+        description: 'Create as draft release'
+        type: boolean
+        default: true
+        required: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release-gui:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Resolve GUI run id
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_RUN_ID: ${{ inputs.gui_run_id }}
+          INPUT_BRANCH: ${{ inputs.branch }}
+        run: |
+          if [ -n "$INPUT_RUN_ID" ]; then
+            echo "Using provided gui_run_id=$INPUT_RUN_ID"
+            echo "run_id=$INPUT_RUN_ID" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BRANCH="$INPUT_BRANCH"
+          if [ -z "$BRANCH" ]; then
+            BRANCH="${{ github.ref_name }}"
+          fi
+
+          RUN_ID=$(gh run list \
+            --workflow "EasyTier GUI" \
+            --branch "$BRANCH" \
+            --status completed \
+            --json databaseId,conclusion,url,displayTitle,headBranch \
+            --limit 20 \
+            --jq '[.[] | select(.conclusion == "success")] | .[0].databaseId // empty')
+
+          if [ -z "$RUN_ID" ]; then
+            echo "No successful EasyTier GUI run found on branch '$BRANCH'"
+            echo "Run EasyTier GUI first, or pass gui_run_id explicitly."
+            exit 1
+          fi
+
+          echo "Auto-resolved GUI run_id=$RUN_ID (branch=$BRANCH)"
+          gh run view "$RUN_ID" --json url,displayTitle,headSha,event,createdAt \
+            --jq '"title=\(.displayTitle)\nurl=\(.url)\nsha=\(.headSha)\nevent=\(.event)\ncreated=\(.createdAt)"'
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download GUI artifacts
+        uses: dawidd6/action-download-artifact@v11
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ steps.resolve.outputs.run_id }}
+          repo: ${{ github.repository }}
+          name: '^easytier-gui-'
+          name_is_regexp: true
+          path: release_assets
+
+      - name: Collect GUI release assets
+        env:
+          GUI_RUN_ID: ${{ steps.resolve.outputs.run_id }}
+        run: |
+          mkdir -p release_files
+
+          if [ ! -d release_assets ] || [ -z "$(ls -A release_assets)" ]; then
+            echo "No GUI artifacts found for run_id=$GUI_RUN_ID"
+            exit 1
+          fi
+
+          # GUI installers are already packaged (.exe/.dmg/.deb/.rpm/.AppImage); upload as-is
+          find release_assets -type f -exec mv {} release_files \;
+          ls -l -R ./release_files
+
+          if [ -z "$(ls -A release_files)" ]; then
+            echo "No GUI files collected"
+            exit 1
+          fi
+
+      - name: Publish GUI Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ inputs.version }}
+          tag_name: ${{ inputs.version }}
+          draft: ${{ inputs.draft }}
+          make_latest: ${{ inputs.make_latest }}
+          files: |
+            ./release_files/*
+          token: ${{ secrets.GITHUB_TOKEN }}
+          body: |
+            GUI release from EasyTier GUI run `${{ steps.resolve.outputs.run_id }}`.
